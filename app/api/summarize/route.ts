@@ -1,14 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  buildVideoContext,
-  getAnthropic,
-  hasApiKey,
-  missingKeyResponse,
-  MODEL,
-  SUMMARY_SYSTEM,
-  textStreamResponse,
-  truncateTranscript,
-} from "@/lib/anthropic";
+import { hasApiKey, missingKeyResponse, streamCompletion } from "@/lib/ai";
+import { buildVideoContext, SUMMARY_SYSTEM, truncateTranscript } from "@/lib/prompts";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -47,11 +39,8 @@ export async function POST(req: Request) {
   const { text, truncated } = truncateTranscript(transcript);
   const context = buildVideoContext(title, author, text);
 
-  const stream = getAnthropic().messages.stream({
-    model: MODEL,
-    max_tokens: 64000,
-    thinking: { type: "adaptive" },
-    system: SUMMARY_SYSTEM,
+  return streamCompletion({
+    system: [{ text: SUMMARY_SYSTEM }],
     messages: [
       {
         role: "user",
@@ -60,7 +49,6 @@ export async function POST(req: Request) {
           : context,
       },
     ],
+    maxTokens: 64000,
   });
-
-  return textStreamResponse(stream);
 }

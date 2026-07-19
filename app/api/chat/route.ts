@@ -1,15 +1,6 @@
 import { NextResponse } from "next/server";
-import type Anthropic from "@anthropic-ai/sdk";
-import {
-  buildVideoContext,
-  CHAT_SYSTEM_INTRO,
-  getAnthropic,
-  hasApiKey,
-  missingKeyResponse,
-  MODEL,
-  textStreamResponse,
-  truncateTranscript,
-} from "@/lib/anthropic";
+import { hasApiKey, missingKeyResponse, streamCompletion } from "@/lib/ai";
+import { buildVideoContext, CHAT_SYSTEM_INTRO, truncateTranscript } from "@/lib/prompts";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -63,24 +54,15 @@ export async function POST(req: Request) {
 
   const { text } = truncateTranscript(transcript);
 
-  // The transcript block carries cache_control so follow-up questions about the
-  // same video are served from the prompt cache.
-  const system: Anthropic.TextBlockParam[] = [
-    { type: "text", text: CHAT_SYSTEM_INTRO },
-    {
-      type: "text",
-      text: buildVideoContext(title, author, text),
-      cache_control: { type: "ephemeral" },
-    },
-  ];
-
-  const stream = getAnthropic().messages.stream({
-    model: MODEL,
-    max_tokens: 16000,
-    thinking: { type: "adaptive" },
-    system,
+  // The transcript block is marked cacheable so follow-up questions about the
+  // same video are served from the provider's prompt cache (Anthropic:
+  // explicit cache_control; OpenAI: automatic for repeated stable prefixes).
+  return streamCompletion({
+    system: [
+      { text: CHAT_SYSTEM_INTRO },
+      { text: buildVideoContext(title, author, text), cache: true },
+    ],
     messages,
+    maxTokens: 16000,
   });
-
-  return textStreamResponse(stream);
 }
