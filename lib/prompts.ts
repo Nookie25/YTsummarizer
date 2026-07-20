@@ -37,12 +37,15 @@ Produce a structured knowledge summary in EXACTLY this markdown structure, with 
 - None
 
 ## Notable Quotes
-2-4 bullets. Each bullet MUST be in the form:
+0-4 bullets. Only include a line if it is genuinely distinctive or memorable — a striking turn of phrase, a strong claim, a one-liner someone would screenshot or repeat. Do NOT manufacture quotes from videos that don't have any — tutorials, procedural walkthroughs, routine explanations, and most how-to/demo content usually have none, and that's fine. Each bullet MUST be in the form:
 - "Exact or lightly cleaned-up quote from the transcript." — [mm:ss]
+
+If there are no genuinely quotable lines, write exactly:
+- None
 
 Rules for timestamps: copy them from the transcript lines (the moment where that topic or quote begins). Never invent a timestamp. Always keep the [..] bracket format.
 
-General rules: plain language over jargon; ground everything in the transcript — do not pad or invent; keep total length proportional to the video (short video → short summary); no preamble before "## TL;DR" and nothing after the last quote.`;
+General rules: plain language over jargon; ground everything in the transcript — do not pad or invent; keep total length proportional to the video (short video → short summary); no preamble before "## TL;DR" and nothing after the last section.`;
 
 export const CHAT_SYSTEM_INTRO = `You are a helpful assistant answering questions about one specific YouTube video. The full transcript follows, with [mm:ss] timestamps at the start of each line.
 

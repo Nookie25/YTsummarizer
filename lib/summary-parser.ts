@@ -112,20 +112,25 @@ function parseActions(body: string): string[] {
 }
 
 function parseQuotes(body: string): Quote[] {
-  return bulletLines(body).map((item) => {
-    const tsMatch = item.match(TS);
-    const seconds = tsMatch ? parseTimestamp(tsMatch[1]) : null;
-    let text = item.replace(TS, "");
-    // strip trailing dash left behind after removing the timestamp
-    text = text.replace(/\s+[—–-]\s*$/, "").trim();
-    // strip surrounding quotation marks
-    text = text.replace(/^["“”']+|["“”']+$/g, "").trim();
-    return {
-      text: stripBold(text),
-      time: tsMatch?.[1] ?? null,
-      seconds: seconds ?? null,
-    };
-  });
+  return bulletLines(body)
+    .map((item) => {
+      const tsMatch = item.match(TS);
+      const seconds = tsMatch ? parseTimestamp(tsMatch[1]) : null;
+      let text = item.replace(TS, "");
+      // strip trailing dash left behind after removing the timestamp
+      text = text.replace(/\s+[—–-]\s*$/, "").trim();
+      // strip surrounding quotation marks
+      text = text.replace(/^["“”']+|["“”']+$/g, "").trim();
+      return {
+        text: stripBold(text),
+        time: tsMatch?.[1] ?? null,
+        seconds: seconds ?? null,
+      };
+    })
+    .filter((q) => {
+      const t = q.text.toLowerCase();
+      return t !== "none" && t !== "none.";
+    });
 }
 
 export function parseSummary(raw: string): ParsedSummary {
