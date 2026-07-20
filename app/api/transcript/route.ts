@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchVideoData, parseVideoId, TranscriptError } from "@/lib/youtube";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { log } from "@/lib/log";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
       const status = err.code === "NO_CAPTIONS" || err.code === "VIDEO_UNAVAILABLE" ? 404 : 502;
       return NextResponse.json({ error: err.message, code: err.code }, { status });
     }
-    console.error("transcript route error:", err);
+    log.error("transcript route error", err, { videoId });
     return NextResponse.json(
       { error: "Couldn't fetch the transcript. Please try again." },
       { status: 502 },

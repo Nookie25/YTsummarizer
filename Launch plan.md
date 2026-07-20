@@ -1,13 +1,13 @@
 # Reelnotes: From Local App → Hosted Product → Business
 
 ## Where you are now
-Working local app, dual AI provider (Anthropic/OpenAI), transcript + streamed summary + chat + export, all committed to git. Nothing is deployed, no accounts, no billing, no accessibility audit.
+Live on Vercel under the MemoTube rebrand, dual AI provider (Anthropic/OpenAI), transcript + streamed summary + chat + export, durable Upstash-backed rate limiting. Pushed to GitHub, env vars set, Supadata key in place, end-to-end verified. No custom domain yet. No accounts, no billing, no accessibility audit.
 
 ---
 
 ## Phase 1 — Deploy & Go Live
 
-**1. Push to GitHub**
+**1. Push to GitHub** ✅ Done
 Vercel deploys from a GitHub repo and auto-redeploys on every push.
 ```
 git remote add origin https://github.com/<you>/reelnotes.git
@@ -16,26 +16,26 @@ git push -u origin main
 ```
 Double-check on GitHub that `.env.local` didn't get committed (it's gitignored, but verify).
 
-**2. Import into Vercel**
+**2. Import into Vercel** ✅ Done
 Go to vercel.com/new, sign in with GitHub, select the repo. Vercel auto-detects Next.js — leave defaults. Don't hit Deploy yet.
 
-**3. Add environment variables in Vercel**
+**3. Add environment variables in Vercel** ✅ Done
 Project → Settings → Environment Variables:
 - `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` + `AI_PROVIDER=openai`)
 - `SUPADATA_API_KEY` (next step)
 
 Then deploy.
 
-**4. Get a Supadata key (transcript fallback)**
+**4. Get a Supadata key (transcript fallback)** ✅ Done
 YouTube blocks caption requests from most cloud IPs, including Vercel's — this will very likely fail without it. Sign up at supadata.ai, generate a key (~100 free requests/month), add as `SUPADATA_API_KEY`, redeploy.
 
-**5. Buy and connect a domain**
+**5. Buy and connect a domain** ✅ Done
 Namecheap or Vercel's own domain registration (~$12/yr). Vercel → Settings → Domains → add it → update DNS as instructed.
 
-**6. Replace the in-memory rate limiter**
+**6. Replace the in-memory rate limiter** ✅ Done
 `lib/rate-limit.ts` stores counts in a JS `Map` — on Vercel this resets constantly across serverless instances and doesn't share state, so it won't reliably protect your API spend once there's real traffic. Swap it for Upstash Redis (free tier, pairs natively with Vercel): install `@upstash/redis` + `@upstash/ratelimit`, replace the logic, add the Upstash env vars.
 
-**7. Verify**
+**7. Verify** ✅ Done
 Paste a real link, confirm transcript/summary/chat/seek/export all work — and test from a different network (phone on cellular) to catch IP-specific issues.
 
 ---
@@ -43,22 +43,22 @@ Paste a real link, confirm transcript/summary/chat/seek/export all work — and 
 ## Phase 2 — Production-Grade & Accessible
 
 **Reliability**
-- **Sentry** — catches production errors with stack traces (`npx @sentry/wizard`, auto-instruments the App Router).
-- **Uptime monitoring** — UptimeRobot or Better Stack, free, pings your URL and alerts you if it goes down.
-- **Structured logging** — Vercel's native Axiom/Better Stack integration, no code changes.
+- ✅ **Sentry** — `@sentry/nextjs` installed and wired up (`instrumentation.ts`, `instrumentation-client.ts`, `sentry.server/edge.config.ts`, `next.config.ts` wrapped). Disabled until `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` are set. **You still need to:** create a Sentry project, add the DSN (+ optional `SENTRY_ORG`/`SENTRY_PROJECT`/`SENTRY_AUTH_TOKEN` for source maps) to Vercel env vars, redeploy.
+- ❌ **Uptime monitoring** — UptimeRobot or Better Stack, free, pings your URL and alerts you if it goes down. **External — nothing to code; sign up and point it at https://memotube.com.**
+- ✅ **Structured logging** — `lib/log.ts` emits one JSON object per line (Vercel captures these for any log drain) and forwards errors to Sentry. Wired into the transcript route, stream, and rate-limiter (replaced the bare `console.*` calls).
 
 **Web accessibility (WCAG)** — this covers two things: usability for people on screen readers/keyboard nav, and real legal exposure (ADA web-accessibility suits are a well-documented, ongoing category once a product has real users/revenue). Known gaps in the current app:
-- The "↻" regenerate button has no `aria-label` — a screen reader announces nothing.
-- Timecode chips and Summary/Chat tabs need visible keyboard focus states, and the tabs need `role="tablist"`/`role="tab"`/`aria-selected` so assistive tech reads them as a tab group.
-- Color contrast (cream-dim text on near-black) should be checked against WCAG AA (4.5:1) with WebAIM's contrast checker, not eyeballed.
-- Full keyboard-only pass through the app, plus a screen-reader pass (VoiceOver, built into Mac).
+- ✅ The "↻" regenerate button now has an `aria-label`.
+- ❌ Timecode chips and Summary/Chat tabs need visible keyboard focus states, and the tabs need `role="tablist"`/`role="tab"`/`aria-selected` so assistive tech reads them as a tab group.
+- ❌ Color contrast (cream-dim text on near-black) should be checked against WCAG AA (4.5:1) with WebAIM's contrast checker, not eyeballed.
+- ❌ Full keyboard-only pass through the app, plus a screen-reader pass (VoiceOver, built into Mac).
 
 Run axe DevTools or Lighthouse's Accessibility tab first to catch objective violations, then do the manual pass.
 
 **Performance & SEO basics**
-- Open Graph tags so shared links show a title/image preview.
-- `sitemap.xml` + `robots.txt` if you want Google indexing it.
-- Lighthouse performance pass.
+- ✅ Open Graph tags so shared links show a title/image preview (set in `app/layout.tsx`, now with a `metadataBase` of https://memotube.com so image URLs resolve absolutely).
+- ✅ `sitemap.xml` + `robots.txt` — generated by `app/sitemap.ts` + `app/robots.ts` (origin from `lib/site.ts`, overridable via `NEXT_PUBLIC_SITE_URL`). Verified serving correctly in dev.
+- ❌ Lighthouse performance pass. **Run it yourself against the live site: Chrome DevTools → Lighthouse tab → analyze https://memotube.com.**
 
 ---
 

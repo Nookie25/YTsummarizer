@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const geist = Geist({
@@ -15,6 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "MemoTube — Understand Hours of Content in Minutes",
   description:
     "Extract key insights, action items, timestamps, and important ideas from any YouTube video with AI-powered precision. Stop consuming content. Start absorbing knowledge.",

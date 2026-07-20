@@ -1,5 +1,6 @@
 import { Ratelimit, type Duration } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { log } from "@/lib/log";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -89,7 +90,7 @@ export async function checkRateLimit(
   const limiter = getLimiter(opts);
   if (!limiter) {
     if (!warnedNoUpstash && process.env.NODE_ENV === "production") {
-      console.warn(
+      log.warn(
         "[rate-limit] UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN not set — " +
           "falling back to an in-memory limiter, which does not persist across " +
           "serverless instances and offers only best-effort protection.",

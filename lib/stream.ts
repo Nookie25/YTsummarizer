@@ -2,6 +2,8 @@
 // with a consistent fallback message if the underlying provider call fails
 // mid-stream. Shared by every provider implementation.
 
+import { log } from "@/lib/log";
+
 export function createTextStream(
   produce: (write: (text: string) => void) => Promise<void>,
 ): Response {
@@ -12,7 +14,7 @@ export function createTextStream(
         await produce((text) => controller.enqueue(encoder.encode(text)));
         controller.close();
       } catch (err) {
-        console.error("stream error:", err);
+        log.error("stream error", err);
         controller.enqueue(
           encoder.encode("\n\n> ⚠️ The response was interrupted. Please try again."),
         );
