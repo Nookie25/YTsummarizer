@@ -1,0 +1,110 @@
+# Reelnotes: From Local App → Hosted Product → Business
+
+## Where you are now
+Working local app, dual AI provider (Anthropic/OpenAI), transcript + streamed summary + chat + export, all committed to git. Nothing is deployed, no accounts, no billing, no accessibility audit.
+
+---
+
+## Phase 1 — Deploy & Go Live
+
+**1. Push to GitHub**
+Vercel deploys from a GitHub repo and auto-redeploys on every push.
+```
+git remote add origin https://github.com/<you>/reelnotes.git
+git branch -M main
+git push -u origin main
+```
+Double-check on GitHub that `.env.local` didn't get committed (it's gitignored, but verify).
+
+**2. Import into Vercel**
+Go to vercel.com/new, sign in with GitHub, select the repo. Vercel auto-detects Next.js — leave defaults. Don't hit Deploy yet.
+
+**3. Add environment variables in Vercel**
+Project → Settings → Environment Variables:
+- `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` + `AI_PROVIDER=openai`)
+- `SUPADATA_API_KEY` (next step)
+
+Then deploy.
+
+**4. Get a Supadata key (transcript fallback)**
+YouTube blocks caption requests from most cloud IPs, including Vercel's — this will very likely fail without it. Sign up at supadata.ai, generate a key (~100 free requests/month), add as `SUPADATA_API_KEY`, redeploy.
+
+**5. Buy and connect a domain**
+Namecheap or Vercel's own domain registration (~$12/yr). Vercel → Settings → Domains → add it → update DNS as instructed.
+
+**6. Replace the in-memory rate limiter**
+`lib/rate-limit.ts` stores counts in a JS `Map` — on Vercel this resets constantly across serverless instances and doesn't share state, so it won't reliably protect your API spend once there's real traffic. Swap it for Upstash Redis (free tier, pairs natively with Vercel): install `@upstash/redis` + `@upstash/ratelimit`, replace the logic, add the Upstash env vars.
+
+**7. Verify**
+Paste a real link, confirm transcript/summary/chat/seek/export all work — and test from a different network (phone on cellular) to catch IP-specific issues.
+
+---
+
+## Phase 2 — Production-Grade & Accessible
+
+**Reliability**
+- **Sentry** — catches production errors with stack traces (`npx @sentry/wizard`, auto-instruments the App Router).
+- **Uptime monitoring** — UptimeRobot or Better Stack, free, pings your URL and alerts you if it goes down.
+- **Structured logging** — Vercel's native Axiom/Better Stack integration, no code changes.
+
+**Web accessibility (WCAG)** — this covers two things: usability for people on screen readers/keyboard nav, and real legal exposure (ADA web-accessibility suits are a well-documented, ongoing category once a product has real users/revenue). Known gaps in the current app:
+- The "↻" regenerate button has no `aria-label` — a screen reader announces nothing.
+- Timecode chips and Summary/Chat tabs need visible keyboard focus states, and the tabs need `role="tablist"`/`role="tab"`/`aria-selected` so assistive tech reads them as a tab group.
+- Color contrast (cream-dim text on near-black) should be checked against WCAG AA (4.5:1) with WebAIM's contrast checker, not eyeballed.
+- Full keyboard-only pass through the app, plus a screen-reader pass (VoiceOver, built into Mac).
+
+Run axe DevTools or Lighthouse's Accessibility tab first to catch objective violations, then do the manual pass.
+
+**Performance & SEO basics**
+- Open Graph tags so shared links show a title/image preview.
+- `sitemap.xml` + `robots.txt` if you want Google indexing it.
+- Lighthouse performance pass.
+
+---
+
+## Phase 3 — Turn Into a Business
+
+**Auth & accounts** — nothing persists right now; no way to attach usage/billing to a person. Clerk (fastest, free tier) or Auth.js (more control, no vendor lock-in).
+
+**Database** — Postgres via Neon or Supabase (free tiers, native Vercel integration). Store: users, summaries (video_id, title, text, created_at, user_id), usage_events.
+
+**Monetization** — three shapes:
+1. **Freemium** (recommended start): N free summaries/month, paid tier for more + priority. Cap the free tier low (e.g., 5/month) so costs stay predictable.
+2. Pure metered credits.
+3. Flat subscription — simplest to build, riskiest if a few power users rack up huge AI costs.
+
+Stripe Checkout + Customer Portal handles the billing UI for you — don't build that yourself.
+
+**Cost modeling & usage limits** — this is the part to nail down *before* opening it up publicly. Right now every visitor spends your personal key with no hard ceiling. Rough numbers: a 2-hour video transcript (~30-40k tokens) summarized with Opus 4.8 runs roughly $0.15-0.50/summary; Haiku or gpt-4o-mini would be 5-10x cheaper. Recommendation: cheap model on the free tier, gate the expensive model behind paid (the app's already architected for this — it's a model-string swap per user tier). Enforce hard per-user caps in the database, not just IP-based limiting (trivially bypassed with a VPN).
+
+**Legal — the part I'd flag hardest:**
+- **YouTube's ToS** restrict scraping/downloading content outside their official tools. What this app does with captions sits in a gray area — plenty of commercial tools (NoteGPT, etc.) operate this way, but "others do it" isn't "zero risk." Concretely: YouTube could block the fetching at any time without warning, and worst case there's a cease-and-desist. This is the single biggest business-model risk here, and it's not something engineering can solve around — worth reading YouTube's ToS yourself or a quick lawyer consult before investing real money in growth.
+- **Privacy Policy** — required once you have accounts and are sending user-submitted URLs/transcripts to a third-party AI API. Termly-generated starting point, lawyer review once there's real revenue.
+- **Terms of Service** — acceptable use, liability limits, and a clause disclaiming accuracy of AI-generated summaries.
+
+**Growth (once the above is solid)**
+- SEO — real search volume for "youtube summarizer" type terms; consider static content pages since the core tool is behind a "paste a URL" interaction.
+- Analytics — PostHog or Plausible (privacy-friendly, no cookie-banner overhead).
+- A Chrome extension as a growth channel later.
+
+---
+
+## Suggested sequencing
+
+| Phase | Step | Est. time | Est. cost | Depends on |
+|---|---|---|---|---|
+| 1 | GitHub push | 10 min | $0 | — |
+| 1 | Vercel deploy | 15 min | $0 (Hobby) | GitHub |
+| 1 | Env vars | 10 min | usage-based | Vercel |
+| 1 | Supadata key | 15 min | $0–$10/mo | Vercel |
+| 1 | Domain | 30 min + DNS | ~$12/yr | Vercel |
+| 1 | Upstash rate limiter | 1–2 hrs dev | $0 (free tier) | Vercel |
+| 2 | Sentry | 30 min | $0 | Phase 1 |
+| 2 | Uptime monitor | 15 min | $0 | Phase 1 |
+| 2 | Accessibility audit + fixes | 1–2 days dev | $0 | — |
+| 3 | Auth (Clerk) | 1 day | $0 up to 10k MAU | Phase 1 |
+| 3 | Database | 1 day | $0 (free tier) | Auth |
+| 3 | Stripe | 2–3 days | 2.9% + $0.30/txn | Database, Auth |
+| 3 | Cost model + usage caps | 1–2 days | reduces variable cost | Database |
+| 3 | Legal | 1 day (self) – 2 wks (lawyer) | $0–$1000+ | before marketing |
+| 3 | Analytics | half day | $0 | — |

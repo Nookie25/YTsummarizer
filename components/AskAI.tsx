@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Markdown from "@/components/Markdown";
+import { ChatMarkdown } from "@/components/Inline";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -14,7 +14,7 @@ const SUGGESTIONS = [
   "What would the speaker say to a skeptic?",
 ];
 
-export default function ChatPanel({
+export default function AskAI({
   title,
   author,
   transcript,
@@ -32,7 +32,6 @@ export default function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Reset the conversation when the video changes
   useEffect(() => {
     setMessages([]);
     setError(null);
@@ -91,23 +90,23 @@ export default function ChatPanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="card flex h-[560px] flex-col overflow-hidden">
       <div
         ref={scrollRef}
-        className="panel-scroll min-h-0 flex-1 space-y-4 overflow-y-auto pr-2"
+        className="panel-scroll min-h-0 flex-1 space-y-5 overflow-y-auto p-6"
       >
         {messages.length === 0 && (
-          <div className="flex h-full flex-col items-start justify-center gap-4 py-6">
-            <p className="font-display text-xl italic text-cream-dim">
-              Ask anything about this video…
+          <div className="flex h-full flex-col items-start justify-center gap-5">
+            <p className="text-[17px] font-medium text-text2">
+              Ask anything about this video.
             </p>
-            <div className="flex flex-col items-start gap-2">
+            <div className="flex flex-col items-start gap-2.5">
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => send(s)}
-                  className="rounded-full border border-line px-3.5 py-1.5 text-left text-[13px] text-cream-dim transition-colors hover:border-line-strong hover:text-cream"
+                  className="rounded-full border border-line bg-white/[0.02] px-4 py-2 text-left text-[13px] text-text2 transition-all hover:border-line-bright hover:bg-white/[0.05] hover:text-text"
                 >
                   {s}
                 </button>
@@ -120,7 +119,7 @@ export default function ChatPanel({
           const streamingThis = isStreaming && isLast && msg.role === "assistant";
           return msg.role === "user" ? (
             <div key={i} className="flex justify-end">
-              <div className="max-w-[85%] rounded-xl rounded-br-sm bg-raised px-3.5 py-2.5 text-[14px] leading-relaxed text-cream">
+              <div className="max-w-[85%] rounded-2xl rounded-br-md bg-indigo/15 px-4 py-2.5 text-[14px] leading-relaxed text-text">
                 {msg.content}
               </div>
             </div>
@@ -128,23 +127,25 @@ export default function ChatPanel({
             <div key={i} className="max-w-[95%]">
               <div className={streamingThis ? "stream-caret" : undefined}>
                 {msg.content ? (
-                  <Markdown text={msg.content} onSeek={onSeek} />
+                  <ChatMarkdown text={msg.content} onSeek={onSeek} />
                 ) : streamingThis ? (
-                  <span className="font-mono text-xs text-muted">thinking…</span>
+                  <span className="pulse-soft font-mono text-[12px] text-muted">
+                    thinking…
+                  </span>
                 ) : null}
               </div>
             </div>
           );
         })}
         {error && (
-          <p className="rounded-lg border border-signal/30 bg-signal/5 px-3 py-2 text-[13px] text-cream-dim">
+          <p role="alert" className="rounded-xl border border-error/25 bg-error/[0.06] px-4 py-2.5 text-[13px] text-text2">
             {error}
           </p>
         )}
       </div>
 
       <form
-        className="mt-3 flex shrink-0 gap-2 border-t border-line pt-3"
+        className="flex shrink-0 gap-2.5 border-t border-line bg-white/[0.015] p-4"
         onSubmit={(e) => {
           e.preventDefault();
           send(input);
@@ -154,12 +155,13 @@ export default function ChatPanel({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about the video…"
-          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3.5 py-2.5 text-[14px] text-cream placeholder:text-muted focus:border-line-strong focus:outline-none"
+          aria-label="Ask a question about the video"
+          className="min-w-0 flex-1 rounded-xl border border-line bg-bg2 px-4 py-2.5 text-[14px] text-text placeholder:text-muted focus:border-indigo/50 focus:outline-none"
         />
         <button
           type="submit"
           disabled={isStreaming || !input.trim()}
-          className="rounded-lg bg-signal px-4 py-2.5 text-[14px] font-medium text-ink transition-colors hover:bg-signal-deep disabled:cursor-not-allowed disabled:opacity-40"
+          className="btn-primary !rounded-xl !px-5 !py-2.5 text-[14px]"
         >
           {isStreaming ? "…" : "Ask"}
         </button>

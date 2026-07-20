@@ -1,38 +1,37 @@
 import type { Metadata } from "next";
-import { Instrument_Serif, Spline_Sans, Spline_Sans_Mono } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
-  style: ["normal", "italic"],
+const geist = Geist({
   subsets: ["latin"],
-  variable: "--font-instrument-serif",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-geist",
 });
 
-const splineSans = Spline_Sans({
+const geistMono = Geist_Mono({
   subsets: ["latin"],
-  variable: "--font-spline-sans",
-});
-
-const splineMono = Spline_Sans_Mono({
-  subsets: ["latin"],
-  variable: "--font-spline-mono",
+  weight: ["400", "500"],
+  variable: "--font-geist-mono",
 });
 
 export const metadata: Metadata = {
-  title: "Reelnotes — YouTube Video Summarizer",
+  title: "MemoTube — Understand Hours of Content in Minutes",
   description:
-    "Paste a YouTube link and get an AI summary with timestamped key moments, the full transcript, and a chat that answers from the video.",
+    "Extract key insights, action items, timestamps, and important ideas from any YouTube video with AI-powered precision. Stop consuming content. Start absorbing knowledge.",
+  openGraph: {
+    title: "MemoTube — Understand Hours of Content in Minutes",
+    description:
+      "Extract key insights, action items, timestamps, and important ideas from any YouTube video with AI-powered precision.",
+    type: "website",
+    siteName: "MemoTube",
+  },
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="en"
-      className={`${instrumentSerif.variable} ${splineSans.variable} ${splineMono.variable}`}
-    >
+    <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
       <body>{children}</body>
     </html>
   );

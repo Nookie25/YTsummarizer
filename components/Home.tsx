@@ -3,11 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { transcriptToText, type TranscriptSegment } from "@/lib/format";
-import UrlInput from "@/components/UrlInput";
-import VideoPlayer, { type VideoPlayerHandle } from "@/components/VideoPlayer";
-import TranscriptPanel from "@/components/TranscriptPanel";
-import SummaryPanel from "@/components/SummaryPanel";
-import ChatPanel from "@/components/ChatPanel";
+import { parseSummary, readingMinutes } from "@/lib/summary-parser";
+import Backdrop from "@/components/Backdrop";
+import Logo from "@/components/Logo";
+import CommandBar from "@/components/CommandBar";
+import Hero from "@/components/Hero";
+import FeaturedExamples from "@/components/FeaturedExamples";
+import ProgressPanel from "@/components/ProgressPanel";
+import VideoHeader from "@/components/VideoHeader";
+import SummarySections from "@/components/SummarySections";
+import AskAI from "@/components/AskAI";
+import ExportBar from "@/components/ExportBar";
+import TranscriptDrawer from "@/components/TranscriptDrawer";
+import { type VideoPlayerHandle } from "@/components/VideoPlayer";
 
 interface VideoData {
   videoId: string;
@@ -18,16 +26,7 @@ interface VideoData {
   source: "direct" | "supadata";
 }
 
-function Wordmark() {
-  return (
-    <span className="flex items-baseline gap-2 whitespace-nowrap">
-      <span className="rec-dot inline-block h-2 w-2 self-center rounded-full bg-signal" />
-      <span className="font-display text-xl tracking-tight text-cream">
-        Reel<em className="italic text-signal">notes</em>
-      </span>
-    </span>
-  );
-}
+const DEMO_VIDEO_ID = "UF8uR6Z6KLc"; // Steve Jobs' Stanford address
 
 export default function Home() {
   const router = useRouter();
@@ -37,68 +36,80 @@ export default function Home() {
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [inputError, setInputError] = useState<string | null>(null);
 
-  const [summary, setSummary] = useState("");
+  const [summaryRaw, setSummaryRaw] = useState("");
   const [summaryStreaming, setSummaryStreaming] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
-
-  const [tab, setTab] = useState<"summary" | "chat">("summary");
+  const [streamOpened, setStreamOpened] = useState(false);
+  const [chaptersDone, setChaptersDone] = useState(false);
 
   const playerRef = useRef<VideoPlayerHandle>(null);
   const summaryAbortRef = useRef<AbortController | null>(null);
   const loadedIdRef = useRef<string | null>(null);
 
+  const parsed = useMemo(() => parseSummary(summaryRaw), [summaryRaw]);
   const transcriptText = useMemo(
     () => (video ? transcriptToText(video.segments) : ""),
     [video],
   );
+  const readingMin = summaryRaw ? readingMinutes(summaryRaw) : null;
 
-  const runSummarize = useCallback(
-    async (data: VideoData, text: string) => {
-      summaryAbortRef.current?.abort();
-      const controller = new AbortController();
-      summaryAbortRef.current = controller;
+  // Small delay so "Detecting chapters" checks in visibly after "Retrieving
+  // transcript" instead of both popping at once.
+  useEffect(() => {
+    if (!video) {
+      setChaptersDone(false);
+      return;
+    }
+    const t = setTimeout(() => setChaptersDone(true), 500);
+    return () => clearTimeout(t);
+  }, [video]);
 
-      setSummary("");
-      setSummaryError(null);
-      setSummaryStreaming(true);
-      try {
-        const res = await fetch("/api/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: data.title,
-            author: data.author,
-            transcript: text,
-          }),
-          signal: controller.signal,
-        });
-        if (!res.ok || !res.body) {
-          const err = await res.json().catch(() => null);
-          throw new Error(err?.error ?? `Summarization failed (HTTP ${res.status}).`);
-        }
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let acc = "";
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          acc += decoder.decode(value, { stream: true });
-          const current = acc;
-          setSummary(current);
-        }
-        if (!acc.trim()) {
-          throw new Error("The model returned an empty summary. Please try again.");
-        }
-      } catch (err) {
-        if (!(err instanceof DOMException && err.name === "AbortError")) {
-          setSummaryError(err instanceof Error ? err.message : "Something went wrong.");
-        }
-      } finally {
-        if (summaryAbortRef.current === controller) setSummaryStreaming(false);
+  const runSummarize = useCallback(async (data: VideoData, text: string) => {
+    summaryAbortRef.current?.abort();
+    const controller = new AbortController();
+    summaryAbortRef.current = controller;
+
+    setSummaryRaw("");
+    setSummaryError(null);
+    setStreamOpened(false);
+    setSummaryStreaming(true);
+    try {
+      const res = await fetch("/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: data.title,
+          author: data.author,
+          transcript: text,
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error ?? `Summarization failed (HTTP ${res.status}).`);
       }
-    },
-    [],
-  );
+      setStreamOpened(true);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        const current = acc;
+        setSummaryRaw(current);
+      }
+      if (!acc.trim()) {
+        throw new Error("The model returned an empty summary. Please try again.");
+      }
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        setSummaryError(err instanceof Error ? err.message : "Something went wrong.");
+      }
+    } finally {
+      if (summaryAbortRef.current === controller) setSummaryStreaming(false);
+    }
+  }, []);
 
   const loadVideo = useCallback(
     async (url: string) => {
@@ -116,8 +127,8 @@ export default function Home() {
         const videoData = data as VideoData;
         loadedIdRef.current = videoData.videoId;
         setVideo(videoData);
-        setTab("summary");
         router.replace(`/?v=${videoData.videoId}`, { scroll: false });
+        window.scrollTo({ top: 0 });
         void runSummarize(videoData, transcriptToText(videoData.segments));
       } catch (err) {
         setInputError(err instanceof Error ? err.message : "Something went wrong.");
@@ -138,150 +149,177 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  const reset = useCallback(() => {
+    summaryAbortRef.current?.abort();
+    loadedIdRef.current = null;
+    setVideo(null);
+    setSummaryRaw("");
+    setSummaryError(null);
+    setInputError(null);
+    router.replace("/", { scroll: false });
+    window.scrollTo({ top: 0 });
+  }, [router]);
+
   const seek = useCallback((seconds: number) => {
     playerRef.current?.seekTo(seconds);
-    if (window.innerWidth < 1024) window.scrollTo({ top: 0, behavior: "smooth" });
+    if (window.scrollY > 240) window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  /* ---------------- Hero (no video loaded) ---------------- */
-  if (!video) {
+  /* ---- Phase + progress stage ---- */
+  const processing =
+    loadingTranscript ||
+    (video != null && summaryStreaming && !parsed.hasContent && !summaryError);
+
+  let stage = 0;
+  if (video) stage = 1;
+  if (video && chaptersDone) stage = 2;
+  if (streamOpened) stage = 3;
+  if (summaryRaw.length > 40) stage = 4;
+  if (parsed.tldr) stage = 5;
+  if (parsed.hasContent && parsed.insights.length > 0) stage = 6;
+
+  /* ================= Landing ================= */
+  if (!video && !processing) {
     return (
-      <main className="relative mx-auto flex min-h-dvh max-w-3xl flex-col items-center justify-center px-6 py-16">
-        <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-[-20%] h-[60vh] w-[80vw] -translate-x-1/2 rounded-full bg-signal/[0.07] blur-[120px]" />
-        </div>
-
-        <div className="rise w-full text-center" style={{ animationDelay: "0ms" }}>
-          <div className="mb-10 flex justify-center">
-            <Wordmark />
-          </div>
-          <h1 className="font-display text-5xl leading-[1.08] tracking-tight text-cream sm:text-6xl">
-            Watch less.
-            <br />
-            <em className="italic text-signal">Know more.</em>
-          </h1>
-          <p className="mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-cream-dim">
-            Paste a YouTube link and get an AI summary with timestamped key
-            moments, the full transcript, and a chat that answers from the video.
-          </p>
-        </div>
-
-        <div className="rise mt-10 w-full" style={{ animationDelay: "120ms" }}>
-          <UrlInput onSubmit={loadVideo} busy={loadingTranscript} />
-          {inputError && (
-            <p className="mt-3 rounded-lg border border-signal/30 bg-signal/5 px-4 py-2.5 text-center text-[13px] text-cream-dim">
-              {inputError}
+      <>
+        <Backdrop />
+        <nav className="relative mx-auto flex w-full max-w-[1200px] items-center justify-between px-6 py-6">
+          <Logo />
+          <span className="hidden font-mono text-[11px] uppercase tracking-[0.22em] text-muted sm:block">
+            Knowledge, compressed
+          </span>
+        </nav>
+        <main className="relative">
+          <Hero
+            onSubmit={loadVideo}
+            onWatchDemo={() => void loadVideo(DEMO_VIDEO_ID)}
+            busy={loadingTranscript}
+            error={inputError}
+          />
+          <FeaturedExamples onPick={(id) => void loadVideo(id)} busy={loadingTranscript} />
+        </main>
+        <footer className="relative border-t border-line">
+          <div className="mx-auto flex w-full max-w-[1200px] flex-col items-center gap-3 px-6 py-10 sm:flex-row sm:justify-between">
+            <Logo compact />
+            <p className="text-[12.5px] text-muted">
+              Stop consuming content. Start absorbing knowledge.
             </p>
-          )}
-        </div>
-
-        <div
-          className="rise mt-12 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 font-mono text-[11px] uppercase tracking-[0.2em] text-muted"
-          style={{ animationDelay: "240ms" }}
-        >
-          <span>Transcript</span>
-          <span className="text-signal">·</span>
-          <span>Timestamped summary</span>
-          <span className="text-signal">·</span>
-          <span>Chat with the video</span>
-        </div>
-      </main>
+          </div>
+        </footer>
+      </>
     );
   }
 
-  /* ---------------- Result view ---------------- */
+  /* ================= Processing ================= */
+  if (processing) {
+    return (
+      <>
+        <Backdrop />
+        <nav className="relative mx-auto flex w-full max-w-[1200px] items-center px-6 py-6">
+          <button type="button" onClick={reset} aria-label="Back to home">
+            <Logo />
+          </button>
+        </nav>
+        <main className="relative">
+          <ProgressPanel stage={stage} videoTitle={video?.title ?? null} />
+        </main>
+      </>
+    );
+  }
+
+  /* ================= Workspace ================= */
   return (
-    <main className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
-      <header className="sticky top-0 z-40 -mx-4 mb-6 flex items-center gap-4 border-b border-line bg-ink/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <button
-          type="button"
-          onClick={() => {
-            summaryAbortRef.current?.abort();
-            loadedIdRef.current = null;
-            setVideo(null);
-            setSummary("");
-            setSummaryError(null);
-            router.replace("/", { scroll: false });
-          }}
-          title="Start over"
-        >
-          <Wordmark />
-        </button>
-        <div className="ml-auto w-full max-w-md">
-          <UrlInput onSubmit={loadVideo} busy={loadingTranscript} compact />
+    <>
+      <Backdrop />
+      <header className="print-hide sticky top-0 z-40 border-b border-line bg-bg/80 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-[1200px] items-center gap-5 px-6 py-3.5">
+          <button type="button" onClick={reset} aria-label="Back to home" className="shrink-0">
+            <Logo compact />
+          </button>
+          <div className="ml-auto w-full max-w-[440px]">
+            <CommandBar onSubmit={loadVideo} busy={loadingTranscript} compact />
+          </div>
         </div>
       </header>
 
-      {inputError && (
-        <p className="mb-4 rounded-lg border border-signal/30 bg-signal/5 px-4 py-2.5 text-[13px] text-cream-dim">
-          {inputError}
-        </p>
-      )}
+      <main className="relative mx-auto w-full max-w-[1200px] px-6 pb-28">
+        {inputError && (
+          <p role="alert" className="print-hide mt-5 rounded-xl border border-error/25 bg-error/[0.06] px-4 py-2.5 text-[13px] text-text2">
+            {inputError}
+          </p>
+        )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]">
-        {/* Left: player + transcript */}
-        <div className="min-w-0">
-          <div className="lg:sticky lg:top-[4.5rem]">
-            <VideoPlayer ref={playerRef} videoId={video.videoId} />
-            <div className="mt-4 border-b border-line pb-4">
-              <h1 className="font-display text-2xl leading-snug text-cream">
-                {video.title}
-              </h1>
-              <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
-                {video.author} · {video.segments.length} caption lines
-              </p>
-            </div>
-            <div className="mt-4">
-              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
-                Transcript
-              </p>
-              <TranscriptPanel segments={video.segments} onSeek={seek} />
-            </div>
-          </div>
+        <div className="fade-up pt-10">
+          <VideoHeader
+            ref={playerRef}
+            videoId={video!.videoId}
+            title={video!.title}
+            author={video!.author}
+            segments={video!.segments}
+            readingMin={parsed.hasContent ? readingMin : null}
+          />
         </div>
 
-        {/* Right: summary / chat */}
-        <div className="min-w-0">
-          <div className="rounded-xl border border-line bg-surface/60 p-5">
-            <div className="mb-4 flex gap-1 rounded-lg border border-line bg-ink p-1">
-              {(["summary", "chat"] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTab(t)}
-                  className={`flex-1 rounded-md px-3 py-1.5 font-mono text-[12px] uppercase tracking-[0.15em] transition-colors ${
-                    tab === t
-                      ? "bg-raised text-cream"
-                      : "text-muted hover:text-cream-dim"
-                  }`}
-                >
-                  {t === "summary" ? "Summary" : "Chat"}
-                </button>
-              ))}
-            </div>
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
+          <ExportBar title={video!.title} markdown={summaryRaw} videoId={video!.videoId} />
+          <button
+            type="button"
+            onClick={() => void runSummarize(video!, transcriptText)}
+            disabled={summaryStreaming}
+            className="btn-ghost print-hide !gap-2 !rounded-xl !px-4 !py-2.5 text-[13px]"
+            aria-label="Regenerate summary"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <path d="M21 3v6h-6" />
+            </svg>
+            Regenerate
+          </button>
+        </div>
 
-            {tab === "summary" ? (
-              <SummaryPanel
-                title={video.title}
-                summary={summary}
-                isStreaming={summaryStreaming}
-                error={summaryError}
-                onSeek={seek}
-                onRegenerate={() => void runSummarize(video, transcriptText)}
-              />
-            ) : (
-              <div className="h-[65dvh] min-h-[24rem]">
-                <ChatPanel
-                  title={video.title}
-                  author={video.author}
-                  transcript={transcriptText}
-                  onSeek={seek}
-                />
+        <div className="mx-auto mt-14 max-w-[860px]">
+          {summaryError ? (
+            <div className="card border-error/20 p-8 text-center">
+              <p className="text-[16px] font-semibold text-text">
+                Couldn&apos;t generate the summary
+              </p>
+              <p className="mt-2 text-[14px] text-text2">{summaryError}</p>
+              <button
+                type="button"
+                onClick={() => void runSummarize(video!, transcriptText)}
+                className="btn-primary mt-6 !px-6 !py-2.5 text-[14px]"
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            <SummarySections parsed={parsed} streaming={summaryStreaming} onSeek={seek} />
+          )}
+
+          <div className="print-hide mt-16 space-y-12">
+            <section>
+              <div className="mb-4 flex items-center gap-2.5">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-line bg-white/[0.03] text-text2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </span>
+                <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">
+                  Ask AI
+                </h2>
               </div>
-            )}
+              <AskAI
+                title={video!.title}
+                author={video!.author}
+                transcript={transcriptText}
+                onSeek={seek}
+              />
+            </section>
+
+            <TranscriptDrawer segments={video!.segments} onSeek={seek} />
           </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }

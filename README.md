@@ -1,9 +1,10 @@
-# Reelnotes — YouTube Video Summarizer
+# MemoTube — Understand Hours of Content in Minutes
 
-Paste a YouTube link and get an AI summary with timestamped key moments, the full
-transcript, and a chat that answers questions from the video. Clicking any
-timestamp — in the transcript, the summary, or a chat answer — seeks the embedded
-player to that moment.
+Paste a YouTube link and get a structured knowledge summary — TL;DR, key insight
+cards, an interactive timeline, action items, and notable quotes — plus the full
+transcript and a chat that answers questions from the video. Clicking any
+timestamp — in the timeline, quotes, transcript, or a chat answer — seeks the
+embedded player to that moment.
 
 Built with Next.js (App Router), Tailwind CSS, and either the Anthropic API
 (Claude Opus 4.8, streamed, default) or the OpenAI API (`gpt-4o` by default) —
@@ -14,12 +15,15 @@ selectable via `AI_PROVIDER`.
 - **Transcript** — fetched free via YouTube's own caption tracks (youtubei.js),
   with an optional [Supadata](https://supadata.ai) fallback for cloud hosts that
   YouTube blocks.
-- **AI summary** — Overview → sectioned summary → Key Moments, streamed live,
-  with clickable `[mm:ss]` timestamps.
+- **Structured AI summary** — TL;DR → Key Insights → Timeline → Action Items →
+  Notable Quotes, streamed live and parsed into interactive sections with
+  clickable `[mm:ss]` timestamps.
 - **Chat with the video** — answers come from the transcript (with prompt
   caching, so follow-up questions are fast and cheap) and cite timestamps.
-- **Copy / export** — copy the summary or download it as `.md` / `.txt`.
-- **Basic abuse protection** — per-IP rate limits and a transcript length cap.
+- **Copy / export** — copy, download as Markdown, print to PDF, copy for
+  Notion, or share a deep link.
+- **Abuse protection** — per-IP rate limits (durable via Upstash Redis when
+  configured, in-memory fallback otherwise) and a transcript length cap.
 
 ## Setup
 
@@ -38,6 +42,7 @@ npm run dev
 | `OPENAI_API_KEY` | if provider is `openai` | [Get a key](https://platform.openai.com/api-keys) |
 | `OPENAI_MODEL` | no | Overrides the OpenAI model (default `gpt-4o`) |
 | `SUPADATA_API_KEY` | no | Transcript fallback for cloud IPs YouTube blocks (needed on Vercel if direct fetching fails) |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | no | Durable rate limiting via [Upstash](https://upstash.com) (recommended for production). Without these, rate limiting falls back to an in-memory limiter. |
 
 Only the key for the *active* provider is required — you don't need both.
 
@@ -56,10 +61,11 @@ requests from datacenter IPs. If summaries work locally but transcript fetching
 fails on Vercel, create a free Supadata key (~100 requests/month free) and set
 `SUPADATA_API_KEY` — the app falls back to it automatically.
 
-**Cost note:** the app calls the active provider's API with *your* key. The
-built-in per-IP rate limits are best-effort (in-memory, per serverless
-instance), so don't share the URL widely without adding a durable rate limiter
-(e.g. Upstash) or an access gate.
+**Cost note:** the app calls the active provider's API with *your* key. Add
+`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` (free tier at
+[upstash.com](https://upstash.com)) before sharing the URL widely — without
+them, rate limiting falls back to an in-memory limiter that resets on every
+cold start and doesn't share state across serverless instances.
 
 ## Project structure
 
@@ -70,20 +76,25 @@ app/
   api/summarize/route.ts    POST → streamed markdown summary
   api/chat/route.ts         POST → streamed chat reply (prompt-cached transcript)
 components/
-  Home.tsx                  page orchestration and layout
+  Home.tsx                  state machine: landing → processing → workspace
+  Hero.tsx / FloatingDashboard.tsx / FeaturedExamples.tsx   landing page
+  ProgressPanel.tsx         animated processing checklist
+  VideoHeader.tsx           player + title/duration/reading-time chips
+  SummarySections.tsx       TL;DR, insights, timeline, action items, quotes
+  AskAI.tsx                 chat with the video
+  ExportBar.tsx             copy / markdown / PDF / Notion / share
+  TranscriptDrawer.tsx      collapsible full transcript
   VideoPlayer.tsx           YouTube IFrame API wrapper (seekTo support)
-  TranscriptPanel.tsx       clickable timestamped transcript
-  SummaryPanel.tsx          streamed summary + copy/export
-  ChatPanel.tsx             chat with the video
-  Markdown.tsx              mini markdown renderer with clickable [mm:ss] chips
+  CommandBar.tsx / Inline.tsx / Logo.tsx / Backdrop.tsx     shared UI
 lib/
   youtube.ts                video ID parsing, oEmbed metadata, transcript providers
   ai.ts                     provider dispatcher (reads AI_PROVIDER, routes to one of the below)
+  summary-parser.ts         parses the streamed summary into typed sections
   anthropic.ts              Claude-specific streaming implementation
   openai.ts                 OpenAI-specific streaming implementation
   ai-types.ts               shared request/response shapes for both providers
   prompts.ts                provider-agnostic system prompts + transcript truncation
   stream.ts                 shared "async producer → streamed Response" helper
   format.ts                 shared timestamp/transcript helpers
-  rate-limit.ts             best-effort per-IP rate limiter
+  rate-limit.ts             per-IP rate limiter (Upstash Redis, in-memory fallback)
 ```

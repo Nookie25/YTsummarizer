@@ -95,9 +95,10 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, { videoId: string }>(
     }));
 
     return (
-      <div className="overflow-hidden rounded-xl border border-line bg-black shadow-[0_8px_40px_rgba(0,0,0,0.55)]">
-        <div ref={containerRef} className="aspect-video w-full [&>iframe]:h-full [&>iframe]:w-full [&_iframe]:aspect-video [&_iframe]:w-full" />
-      </div>
+      <div
+        ref={containerRef}
+        className="aspect-video w-full [&>iframe]:h-full [&>iframe]:w-full [&_iframe]:aspect-video [&_iframe]:w-full"
+      />
     );
   },
 );
