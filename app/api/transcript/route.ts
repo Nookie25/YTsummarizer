@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  const rate = checkRateLimit(`transcript:${clientIp(req)}`, {
+  const rate = await checkRateLimit(`transcript:${clientIp(req)}`, {
     limit: 20,
     windowSeconds: 3600,
   });

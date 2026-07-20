@@ -9,7 +9,7 @@ export const maxDuration = 300;
 export async function POST(req: Request) {
   if (!hasApiKey()) return missingKeyResponse();
 
-  const rate = checkRateLimit(`summarize:${clientIp(req)}`, {
+  const rate = await checkRateLimit(`summarize:${clientIp(req)}`, {
     limit: 10,
     windowSeconds: 3600,
   });

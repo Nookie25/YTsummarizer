@@ -16,7 +16,7 @@ interface ChatBody {
 export async function POST(req: Request) {
   if (!hasApiKey()) return missingKeyResponse();
 
-  const rate = checkRateLimit(`chat:${clientIp(req)}`, {
+  const rate = await checkRateLimit(`chat:${clientIp(req)}`, {
     limit: 40,
     windowSeconds: 3600,
   });
